@@ -9,7 +9,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export function AIChat() {
   const navigate = useNavigate();
-  const { chatHistory, setChatHistory, addMessage, guidanceSummary, setGuidanceSummary, isAuthenticated, userProfile } = useAppContext();
+  const { 
+    chatSessions, activeSessionId, addMessage, createNewSession, switchSession, 
+    guidanceSummary, setGuidanceSummary, isAuthenticated, userProfile 
+  } = useAppContext();
+  
+  const currentChat = chatSessions.find(s => s.id === activeSessionId)?.messages || [];
+  
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -28,16 +34,16 @@ export function AIChat() {
     }
   }, [isAuthenticated, guidanceSummary, userProfile]);
 
-  // Initial greeting prompt if chat history is totally blank
+  // Initial greeting prompt if chat history is totally blank for the current active session
   useEffect(() => {
-    if (isAuthenticated && chatHistory.length === 0) {
+    if (isAuthenticated && activeSessionId && currentChat.length === 0 && !isTyping) {
       addMessage({
         id: 'initial_greeting',
         role: 'assistant',
         content: "Hello. I am RAAH's Legal AI Assistant. I am here to help you understand your legal options safely and securely. How can I assist you today?"
       });
     }
-  }, [isAuthenticated, chatHistory.length]);
+  }, [isAuthenticated, activeSessionId, currentChat.length]);
 
   const generateSummary = (profile: any) => {
     setIsGeneratingSummary(true);
@@ -160,7 +166,7 @@ Use this profile to tailor every response. Never ask the user to repeat anything
 
       // Convert chat history for Gemini, ensuring we omit the local greeting
       // Gemini requires the history array to start with a 'user' message and STRICTLY ALTERNATE
-      const rawHistory = chatHistory.filter(msg => msg.id !== 'initial_greeting');
+      const rawHistory = currentChat.filter(msg => msg.id !== 'initial_greeting');
       const formattedHistory: { role: string, parts: { text: string }[] }[] = [];
 
       let lastRole = '';
@@ -226,29 +232,44 @@ Use this profile to tailor every response. Never ask the user to repeat anything
           {/* Sidebar */}
           <div className="bg-[#F8FAFC] rounded-[10px] p-6 h-full flex flex-col">
             <Button 
-              onClick={() => setChatHistory([])}
+              onClick={createNewSession}
               className="bg-primary text-white hover:bg-primary/90 w-full mb-6 rounded-[10px]"
             >
               <MessageCircle className="w-4 h-4 mr-2" />
               New Chat
             </Button>
 
-            <div className="flex-1">
+            <div className="flex-1 overflow-y-auto pr-2">
               <h3 className="text-[13px] font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-                Chat Memory
+                Chat History
               </h3>
-              <div className="space-y-4 px-1">
+              
+              {chatSessions.length === 0 ? (
                 <div className="bg-white/50 border border-border rounded-lg p-3">
                   <p className="text-[12px] text-slate-600 leading-relaxed">
-                    Your profile summary and previous conversations are automatically saved in the background. 
-                    <br/><br/>
-                    The assistant has full context of your case and will remember your previous messages across sessions.
+                    Your previous conversations will automatically appear here.
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  {chatSessions.map((session) => (
+                    <button
+                      key={session.id}
+                      onClick={() => switchSession(session.id)}
+                      className={`w-full text-left px-3 py-2 rounded-md text-[13px] truncate transition-colors ${
+                        session.id === activeSessionId
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {session.title}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="pt-4 border-t border-border">
+            <div className="pt-4 border-t border-border mt-4">
               <button className="text-[13px] text-secondary hover:underline">
                 Help & Safety
               </button>
@@ -273,21 +294,27 @@ Use this profile to tailor every response. Never ask the user to repeat anything
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
               {/* Display chat history */}
-              {chatHistory.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+              {currentChat.length === 0 && !isTyping ? (
+                 <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                    Send a message to start the legal consultation.
+                 </div>
+              ) : (
+                currentChat.map((message) => (
                   <div
-                    className={`rounded-[10px] px-4 py-3 max-w-[70%] ${message.role === 'user'
-                      ? 'bg-[#F1F5F9] text-foreground'
-                      : 'bg-accent text-foreground'
-                      }`}
+                    key={message.id}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <p className="text-[15px]">{message.content}</p>
+                    <div
+                      className={`rounded-[10px] px-4 py-3 max-w-[70%] ${message.role === 'user'
+                        ? 'bg-[#F1F5F9] text-foreground'
+                        : 'bg-accent text-foreground'
+                        }`}
+                    >
+                      <p className="text-[15px]">{message.content}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-accent text-foreground rounded-[10px] px-4 py-3 max-w-[70%] flex items-center gap-2">

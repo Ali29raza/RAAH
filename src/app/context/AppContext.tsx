@@ -6,6 +6,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: number;
+}
+
 export interface GuidanceSummary {
   identifiedIssue: string;
   relevantLaw: string[];
@@ -56,9 +63,12 @@ export interface LawyerProfile {
 }
 
 interface AppContextType {
-  chatHistory: ChatMessage[];
+  chatSessions: ChatSession[];
+  activeSessionId: string | null;
   addMessage: (message: ChatMessage) => void;
-  setChatHistory: (messages: ChatMessage[]) => void;
+  setRawChatHistory: (data: any) => void; // Used during hydration
+  createNewSession: () => void;
+  switchSession: (sessionId: string) => void;
   guidanceSummary: GuidanceSummary | null;
   setGuidanceSummary: (summary: GuidanceSummary | null) => void;
   selectedLawyer: Lawyer | null;
@@ -84,7 +94,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [guidanceSummary, setGuidanceSummary] = useState<GuidanceSummary | null>(null);
   const [selectedLawyer, setSelectedLawyer] = useState<Lawyer | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
@@ -95,6 +106,48 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [lawyerOnboardingCompleted, setLawyerOnboardingCompleted] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [lawyerProfile, setLawyerProfile] = useState<LawyerProfile | null>(null);
+
+  // Helper to safely parse and migrate incoming history data
+  const hydrateHistory = (data: any, userEmail: string) => {
+    if (!data) return;
+    
+    let parsedData = data;
+    if (typeof data === 'string') {
+      try {
+        parsedData = JSON.parse(data);
+      } catch (e) {
+        return;
+      }
+    }
+
+    if (Array.isArray(parsedData)) {
+      if (parsedData.length === 0) {
+        setChatSessions([]);
+        setActiveSessionId(null);
+        return;
+      }
+
+      // Check if it's the legacy format (array of messages)
+      if (parsedData[0].role !== undefined && parsedData[0].content !== undefined) {
+        const legacySession: ChatSession = {
+          id: 'legacy-session-1',
+          title: 'Previous Conversation',
+          messages: parsedData,
+          updatedAt: Date.now()
+        };
+        setChatSessions([legacySession]);
+        setActiveSessionId(legacySession.id);
+      } else if (parsedData[0].messages !== undefined) {
+        // It's already the new format (array of sessions)
+        setChatSessions(parsedData);
+        if (parsedData.length > 0) {
+          // Sort by newest and set active
+          const sorted = [...parsedData].sort((a, b) => b.updatedAt - a.updatedAt);
+          setActiveSessionId(sorted[0].id);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -117,11 +170,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               setUserProfile(data.user.profile_summary);
             }
             if (data.user.chat_history) {
-              setChatHistory(data.user.chat_history);
+              hydrateHistory(data.user.chat_history, data.user.email);
             } else if (data.user.email) {
               // Fallback to local
               const stored = localStorage.getItem(`chat_history_${data.user.email}`);
-              if (stored) setChatHistory(JSON.parse(stored));
+              if (stored) hydrateHistory(stored, data.user.email);
             }
           } else {
             localStorage.removeItem('auth_token');
@@ -130,6 +183,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             setLawyerProfile(null);
             setUserRole('user');
             setLawyerOnboardingCompleted(false);
+            setChatSessions([]);
+            setActiveSessionId(null);
           }
         } catch (err) {
           console.error('Auth verification failed', err);
@@ -144,46 +199,81 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Local fallback if no backend history exists, handled in checkAuth already
   useEffect(() => {
-    if (userEmail && chatHistory.length === 0) {
+    if (userEmail && chatSessions.length === 0) {
       const storedChat = localStorage.getItem(`chat_history_${userEmail}`);
       if (storedChat) {
-        try {
-          setChatHistory(JSON.parse(storedChat));
-        } catch (e) {
-          console.error("Failed to parse stored chat history");
-        }
+        hydrateHistory(storedChat, userEmail);
       }
     }
   }, [userEmail]);
 
-  const syncChatToBackend = (messages: ChatMessage[]) => {
+  const syncChatToBackend = (sessions: ChatSession[]) => {
     const token = localStorage.getItem('auth_token');
     if (token) {
       fetch('/api/user/chat-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ history: messages })
-      }).catch(err => console.error("Failed to sync chat history out of band", err));
+        body: JSON.stringify({ history: sessions })
+      }).catch(err => console.error("Failed to sync chat sessions out of band", err));
     }
   };
 
   const addMessage = (message: ChatMessage) => {
-    setChatHistory((prev) => {
-      const newHistory = [...prev, message];
-      if (userEmail) {
-        localStorage.setItem(`chat_history_${userEmail}`, JSON.stringify(newHistory));
+    setChatSessions((prevSessions) => {
+      let currentSessions = [...prevSessions];
+      let targetSessionId = activeSessionId;
+
+      // If no active session, create one
+      if (!targetSessionId) {
+        const newSession: ChatSession = {
+          id: Date.now().toString(),
+          title: message.role === 'user' ? message.content.substring(0, 30) + '...' : 'New Chat',
+          messages: [],
+          updatedAt: Date.now()
+        };
+        currentSessions.unshift(newSession);
+        targetSessionId = newSession.id;
+        // Schedule state update for activeSessionId safely
+        setTimeout(() => setActiveSessionId(newSession.id), 0);
       }
-      syncChatToBackend(newHistory);
-      return newHistory;
+
+      // Find and update the target session
+      const sessionIndex = currentSessions.findIndex(s => s.id === targetSessionId);
+      if (sessionIndex >= 0) {
+        currentSessions[sessionIndex] = {
+          ...currentSessions[sessionIndex],
+          messages: [...currentSessions[sessionIndex].messages, message],
+          updatedAt: Date.now(),
+          // Update title if it's currently generic and user sends first message
+          title: (currentSessions[sessionIndex].title === 'New Chat' && message.role === 'user') 
+                 ? message.content.substring(0, 30) + '...' 
+                 : currentSessions[sessionIndex].title
+        };
+      }
+
+      // Sort sessions so most recently updated is first
+      currentSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      if (userEmail) {
+        localStorage.setItem(`chat_history_${userEmail}`, JSON.stringify(currentSessions));
+      }
+      syncChatToBackend(currentSessions);
+      
+      return currentSessions;
     });
   };
 
-  const setChatHistoryWithStorage = (messages: ChatMessage[]) => {
-    setChatHistory(messages);
-    if (userEmail) {
-      localStorage.setItem(`chat_history_${userEmail}`, JSON.stringify(messages));
-    }
-    syncChatToBackend(messages);
+  const createNewSession = () => {
+    setActiveSessionId(null);
+  };
+
+  const switchSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+  };
+
+  const setRawChatHistoryWithStorage = (data: any) => {
+    hydrateHistory(data, userEmail);
+    // Note: Local storage and backend sync will trigger on next message addition
   };
 
   const setUserProfileWithStorage = (profile: UserProfile | null) => {
@@ -201,9 +291,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AppContext.Provider
       value={{
-        chatHistory,
+        chatSessions,
+        activeSessionId,
         addMessage,
-        setChatHistory: setChatHistoryWithStorage,
+        setRawChatHistory: setRawChatHistoryWithStorage,
+        createNewSession,
+        switchSession,
         guidanceSummary,
         setGuidanceSummary,
         selectedLawyer,
