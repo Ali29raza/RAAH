@@ -69,6 +69,8 @@ interface AppContextType {
   setRawChatHistory: (data: any) => void; // Used during hydration
   createNewSession: () => void;
   switchSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => void;
+  clearAllSessions: () => void;
   guidanceSummary: GuidanceSummary | null;
   setGuidanceSummary: (summary: GuidanceSummary | null) => void;
   selectedLawyer: Lawyer | null;
@@ -279,6 +281,35 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setActiveSessionId(sessionId);
   };
 
+  const deleteSession = (sessionId: string) => {
+    setChatSessions((prev) => {
+      const filtered = prev.filter(s => s.id !== sessionId);
+      if (userEmail) {
+        localStorage.setItem(`chat_history_${userEmail}`, JSON.stringify(filtered));
+      }
+      syncChatToBackend(filtered);
+      
+      // If we are deleting the active session, switch to the newest available or null
+      if (activeSessionIdRef.current === sessionId) {
+        const nextActive = filtered.length > 0 ? filtered[0].id : null;
+        activeSessionIdRef.current = nextActive;
+        setTimeout(() => _setActiveSessionId(nextActive), 0);
+      }
+      
+      return filtered;
+    });
+  };
+
+  const clearAllSessions = () => {
+    setChatSessions([]);
+    activeSessionIdRef.current = null;
+    setTimeout(() => _setActiveSessionId(null), 0);
+    if (userEmail) {
+      localStorage.setItem(`chat_history_${userEmail}`, JSON.stringify([]));
+    }
+    syncChatToBackend([]);
+  };
+
   const setRawChatHistoryWithStorage = (data: any) => {
     hydrateHistory(data, userEmail);
     // Note: Local storage and backend sync will trigger on next message addition
@@ -305,6 +336,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setRawChatHistory: setRawChatHistoryWithStorage,
         createNewSession,
         switchSession,
+        deleteSession,
+        clearAllSessions,
         guidanceSummary,
         setGuidanceSummary,
         selectedLawyer,

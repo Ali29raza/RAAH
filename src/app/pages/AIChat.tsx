@@ -4,13 +4,13 @@ import { Header } from '../components/Header';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { useAppContext } from '../context/AppContext';
-import { MessageCircle, Send, Shield, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, Shield, Loader2, Trash2 } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export function AIChat() {
   const navigate = useNavigate();
   const { 
-    chatSessions, activeSessionId, addMessage, createNewSession, switchSession, 
+    chatSessions, activeSessionId, addMessage, createNewSession, switchSession, deleteSession, clearAllSessions,
     guidanceSummary, setGuidanceSummary, isAuthenticated, userProfile 
   } = useAppContext();
   
@@ -253,24 +253,53 @@ Use this profile to tailor every response. Never ask the user to repeat anything
               ) : (
                 <div className="space-y-2">
                   {chatSessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={() => switchSession(session.id)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-[13px] truncate transition-colors ${
+                    <div 
+                      key={session.id} 
+                      className={`group flex items-center w-full rounded-md transition-colors ${
                         session.id === activeSessionId
                           ? 'bg-primary/10 text-primary font-medium'
                           : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
-                      {session.title}
-                    </button>
+                      <button
+                        onClick={() => switchSession(session.id)}
+                        className={`flex-1 text-left px-3 py-2 text-[13px] truncate`}
+                      >
+                        {session.title}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                        className={`p-2 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all ${
+                          session.id === activeSessionId ? 'opacity-100' : ''
+                        }`}
+                        title="Delete Chat"
+                      >
+                        <Trash2 className="w-[14px] h-[14px]" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="pt-4 border-t border-border mt-4">
-              <button className="text-[13px] text-secondary hover:underline">
+            <div className="pt-4 border-t border-border mt-4 space-y-3">
+              {chatSessions.length > 0 && (
+                <button 
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to clear all chat history? This cannot be undone.")) {
+                      clearAllSessions();
+                    }
+                  }}
+                  className="w-full text-left text-[13px] text-red-500 hover:text-red-600 hover:underline flex items-center"
+                >
+                  <Trash2 className="w-[13px] h-[13px] mr-2" />
+                  Clear All Chats
+                </button>
+              )}
+              <button className="text-[13px] text-secondary hover:underline block w-full text-left">
                 Help & Safety
               </button>
             </div>
