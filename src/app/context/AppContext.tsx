@@ -95,7 +95,13 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, _setActiveSessionId] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+
+  const setActiveSessionId = (id: string | null) => {
+    activeSessionIdRef.current = id;
+    _setActiveSessionId(id);
+  };
   const [guidanceSummary, setGuidanceSummary] = useState<GuidanceSummary | null>(null);
   const [selectedLawyer, setSelectedLawyer] = useState<Lawyer | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
@@ -221,7 +227,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const addMessage = (message: ChatMessage) => {
     setChatSessions((prevSessions) => {
       let currentSessions = [...prevSessions];
-      let targetSessionId = activeSessionId;
+      let targetSessionId = activeSessionIdRef.current; // ALWAYS USE REF HERE TO AVOID STALE CLOSURES
 
       // If no active session, create one
       if (!targetSessionId) {
@@ -233,8 +239,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         };
         currentSessions.unshift(newSession);
         targetSessionId = newSession.id;
-        // Schedule state update for activeSessionId safely
-        setTimeout(() => setActiveSessionId(newSession.id), 0);
+        
+        // Update both the ref synchronously and the state asynchronously
+        activeSessionIdRef.current = newSession.id;
+        setTimeout(() => _setActiveSessionId(newSession.id), 0);
       }
 
       // Find and update the target session
