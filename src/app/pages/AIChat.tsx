@@ -159,13 +159,35 @@ Use this profile to tailor every response. Never ask the user to repeat anything
       });
 
       // Convert chat history for Gemini, ensuring we omit the local greeting
-      // Gemini requires the history array to start with a 'user' message
-      const formattedHistory = chatHistory
-        .filter(msg => msg.id !== 'initial_greeting')
-        .map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        }));
+      // Gemini requires the history array to start with a 'user' message and STRICTLY ALTERNATE
+      const rawHistory = chatHistory.filter(msg => msg.id !== 'initial_greeting');
+      const formattedHistory: { role: string, parts: { text: string }[] }[] = [];
+
+      let lastRole = '';
+      for (const msg of rawHistory) {
+        const currentRole = msg.role === 'user' ? 'user' : 'model';
+        
+        // Skip leading model messages if we don't have a user message yet
+        if (formattedHistory.length === 0 && currentRole === 'model') {
+           // We'll inject a dummy user request if the history somehow starts with a model message
+           formattedHistory.push({ role: 'user', parts: [{ text: 'Hello' }] });
+           lastRole = 'user';
+        }
+
+        if (currentRole === lastRole && formattedHistory.length > 0) {
+          // If the role is the same as the last one, concatenate the text to avoid throwing an error
+          const lastIndex = formattedHistory.length - 1;
+          formattedHistory[lastIndex].parts[0].text += `\n\n[Message continued]\n${msg.content}`;
+        } else {
+          // Normal alternating role
+          formattedHistory.push({
+            role: currentRole,
+            parts: [{ text: msg.content }]
+          });
+        }
+        lastRole = currentRole;
+      }
+
 
       const chat = model.startChat({
         history: formattedHistory,

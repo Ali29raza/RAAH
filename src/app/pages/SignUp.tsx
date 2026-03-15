@@ -13,7 +13,8 @@ export function SignUp() {
   const role = searchParams.get('role') || 'user';
   const { 
     setIsAuthenticated, setInterviewCompleted, setUserRole, 
-    setLawyerOnboardingCompleted, setUserEmail, setLawyerProfile 
+    setLawyerOnboardingCompleted, setUserEmail, setLawyerProfile,
+    setChatHistory, setUserProfile
   } = useAppContext();
   const [showLogin, setShowLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -59,6 +60,14 @@ export function SignUp() {
       setInterviewCompleted(data.user?.interview_completed || false);
       setUserRole(data.user?.role || 'user');
       setLawyerOnboardingCompleted(data.user?.lawyer_onboarding_completed || false);
+      setUserEmail(data.user?.email || '');
+
+      if (data.user?.profile_summary) {
+        setUserProfile(data.user?.profile_summary);
+      }
+      if (data.user?.chat_history) {
+        setChatHistory(data.user?.chat_history);
+      }
 
       if (data.user?.role === 'admin') {
         navigate('/admin');
@@ -114,6 +123,13 @@ export function SignUp() {
       setLawyerOnboardingCompleted(data.user?.lawyer_onboarding_completed || false);
       setUserEmail(data.user?.email || '');
       setLawyerProfile(data.user?.lawyer_profile || null);
+      
+      if (data.user?.profile_summary) {
+        setUserProfile(data.user?.profile_summary);
+      }
+      if (data.user?.chat_history) {
+        setChatHistory(data.user?.chat_history);
+      }
 
       if (data.user?.role === 'admin') {
         navigate('/admin');
