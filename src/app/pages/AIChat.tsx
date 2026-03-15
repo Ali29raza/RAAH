@@ -4,7 +4,7 @@ import { Header } from '../components/Header';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { useAppContext } from '../context/AppContext';
-import { MessageCircle, Send, Shield, Loader2, Trash2 } from 'lucide-react';
+import { MessageCircle, Send, Shield, Loader2, Trash2, Menu, X } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export function AIChat() {
@@ -19,6 +19,7 @@ export function AIChat() {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Redirect to signup if not authenticated
   useEffect(() => {
@@ -227,12 +228,36 @@ Use this profile to tailor every response. Never ask the user to repeat anything
     <div className="min-h-screen bg-white">
       <Header />
 
-      <div className="max-w-[1200px] mx-auto px-6 py-8">
-        <div className="grid grid-cols-[280px_1fr] gap-6 h-[calc(100vh-180px)]">
+      <div className="max-w-[1200px] mx-auto px-4 lg:px-6 py-4 lg:py-8">
+        <div className="flex relative lg:grid lg:grid-cols-[280px_1fr] gap-0 lg:gap-6 h-[calc(100vh-140px)] lg:h-[calc(100vh-180px)]">
+          
+          {/* Mobile Sidebar Overlay */}
+          {isSidebarOpen && (
+            <div 
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+          )}
+
           {/* Sidebar */}
-          <div className="bg-[#F8FAFC] rounded-[10px] p-6 h-full flex flex-col">
+          <div className={`fixed inset-y-0 left-0 w-[280px] bg-[#F8FAFC] z-50 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:w-full lg:h-full lg:rounded-[10px] p-6 flex flex-col shadow-2xl lg:shadow-none ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}>
+            <div className="flex justify-between items-center mb-6 lg:hidden">
+              <h2 className="font-semibold text-foreground">Menu</h2>
+              <button 
+                onClick={() => setIsSidebarOpen(false)} 
+                className="text-muted-foreground p-1 hover:bg-slate-200 rounded-md"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
             <Button 
-              onClick={createNewSession}
+              onClick={() => {
+                createNewSession();
+                setIsSidebarOpen(false);
+              }}
               className="bg-primary text-white hover:bg-primary/90 w-full mb-6 rounded-[10px]"
             >
               <MessageCircle className="w-4 h-4 mr-2" />
@@ -262,7 +287,10 @@ Use this profile to tailor every response. Never ask the user to repeat anything
                       }`}
                     >
                       <button
-                        onClick={() => switchSession(session.id)}
+                        onClick={() => {
+                          switchSession(session.id);
+                          setIsSidebarOpen(false);
+                        }}
                         className={`flex-1 text-left px-3 py-2 text-[13px] truncate`}
                       >
                         {session.title}
@@ -306,22 +334,25 @@ Use this profile to tailor every response. Never ask the user to repeat anything
           </div>
 
           {/* Main Chat Area */}
-          <div className="flex flex-col h-full border border-border rounded-[10px]">
-            {/* Chat Header */}
-            <div className="border-b border-border px-6 py-4 flex items-center justify-between">
-              <h2 className="text-[20px] font-semibold text-foreground">
-                AI Legal Assistant
+          <div className="flex-1 flex flex-col bg-white rounded-[10px] border border-border lg:border-none shadow-sm lg:shadow-none relative w-full overflow-hidden">
+            
+            {/* Mobile Header Toggle */}
+            <div className="lg:hidden flex items-center px-4 py-3 border-b border-border bg-white sticky top-0 z-10 w-full">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="mr-3 text-slate-500 hover:text-slate-800 p-1 -ml-1"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <h2 className="font-semibold text-[15px] truncate flex-1 text-foreground">
+                {currentChat.length > 0 
+                  ? (chatSessions.find(s => s.id === activeSessionId)?.title || 'AI Legal Assistant') 
+                  : 'New Chat'}
               </h2>
-              <div className="inline-flex items-center gap-2 bg-accent px-3 py-1.5 rounded-full">
-                <Shield className="w-3 h-3 text-secondary" />
-                <span className="text-[13px] font-medium text-secondary">
-                  Confidential Mode ON
-                </span>
-              </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-6">
               {/* Display chat history */}
               {currentChat.length === 0 && !isTyping ? (
                  <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
@@ -353,24 +384,29 @@ Use this profile to tailor every response. Never ask the user to repeat anything
                 </div>
               )}
             </div>
-
             {/* Input Area */}
-            <div className="border-t border-border px-6 py-4">
-              <div className="flex items-center gap-3">
+            <div className="p-4 lg:p-6 border-t border-border bg-white z-10 sticky bottom-0">
+              <div className="relative flex items-center">
                 <Input
+                  type="text"
+                  placeholder="Type your message..."
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Type your message..."
-                  className="flex-1 rounded-[10px]"
-                  disabled={isTyping}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSendMessage();
+                    }
+                  }}
+                  className="w-full h-12 lg:h-14 pr-12 rounded-full border-border focus:border-primary text-[14px] lg:text-[15px] shadow-sm"
+                  disabled={isTyping || isGeneratingSummary}
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={isTyping}
-                  className="bg-primary text-white hover:bg-primary/90 rounded-[10px]"
+                  disabled={!inputMessage.trim() || isTyping || isGeneratingSummary}
+                  className="absolute right-1 lg:right-2 w-10 h-10 lg:w-10 lg:h-10 rounded-full p-0 flex items-center justify-center bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+                  size="icon"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="w-4 h-4 lg:w-5 lg:h-5" />
                 </Button>
               </div>
             </div>

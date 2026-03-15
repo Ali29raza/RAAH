@@ -8,7 +8,7 @@ export function Header() {
   const location = useLocation();
   const { 
     isAuthenticated, setIsAuthenticated, setUserProfile, 
-    setChatHistory, setGuidanceSummary, lawyerProfile, userEmail,
+    clearAllSessions, setGuidanceSummary, lawyerProfile, userEmail,
     setUserEmail, setLawyerProfile, setInterviewCompleted,
     setUserRole, setLawyerOnboardingCompleted, userRole
   } = useAppContext();
@@ -60,7 +60,7 @@ export function Header() {
     localStorage.removeItem('auth_token');
     setIsAuthenticated(false);
     setUserProfile(null);
-    setChatHistory([]);
+    clearAllSessions();
     setGuidanceSummary(null);
     setUserEmail('');
     setLawyerProfile(null);
@@ -117,8 +117,8 @@ export function Header() {
             <div className="text-[11px] text-muted-foreground">Rights Awareness Assistance Hub</div>
           </Link>
         </div>
-        <div className="flex items-center gap-6">
-          <nav className="flex items-center gap-6">
+        <div className="flex items-center gap-4 lg:gap-6">
+          <nav className="hidden md:flex items-center gap-6">
             <Link to="/" className="text-[15px] text-foreground hover:text-primary transition-colors">
               Home
             </Link>
@@ -173,7 +173,7 @@ export function Header() {
               </>
             ) : (
               <>
-                <Link to="/signup">
+                <Link to="/signup" className="hidden sm:block">
                   <Button variant="outline" className="border-primary text-primary hover:bg-primary/5">
                     Login
                   </Button>
