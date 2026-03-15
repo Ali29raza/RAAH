@@ -14,7 +14,7 @@ export function SignUp() {
   const { 
     setIsAuthenticated, setInterviewCompleted, setUserRole, 
     setLawyerOnboardingCompleted, setUserEmail, setLawyerProfile,
-    setChatHistory, setUserProfile
+    setRawChatHistory, setUserProfile
   } = useAppContext();
   const [showLogin, setShowLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -66,7 +66,7 @@ export function SignUp() {
         setUserProfile(data.user?.profile_summary);
       }
       if (data.user?.chat_history) {
-        setChatHistory(data.user?.chat_history);
+        setRawChatHistory(data.user?.chat_history);
       }
 
       if (data.user?.role === 'admin') {
@@ -128,7 +128,7 @@ export function SignUp() {
         setUserProfile(data.user?.profile_summary);
       }
       if (data.user?.chat_history) {
-        setChatHistory(data.user?.chat_history);
+        setRawChatHistory(data.user?.chat_history);
       }
 
       if (data.user?.role === 'admin') {
